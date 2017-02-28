@@ -85,11 +85,62 @@ go.projection = Projection
 go.datatype = DataType
 
 go.to_tiff('D:/Projects/H2OShed_Tool/wsALSS-1065/yeah')
-
-
 ##############################################################################
-# Notes
+kk = []
+for x, y in zip((range(0,10)),(range(10,20))):
+    kk.append((x,y))
+    
+mm = []
+for x, y in zip((range(0,10)),(range(20,30))):
+    mm.append((x,y))
+    
+yy = mm[:3]
+yy[0] = (0,20)
 
+import numpy as np  # this is where you use pandas!
+
+rr = np.array(mm)
+dd = np.array(yy)
+
+# sort tuples on x val
+
+# try solution from the NHD Lakes QA script
+
+dd in rr
+
+import pandas as pd
+
+ww = pd.DataFrame(dd, columns=['lon','lat'], index=[47 for i in range(len(dd))])
+aa = pd.DataFrame(rr, columns=['lon','lat'])
+
+# stack
+
+# copy
+
+# drop_duplicates -- iterate here
+
+range?
+pd.DataFrame?
+
+
+# would it always be he smallest one that gets the val? ..yes!
+
+# index DF with val (COMID), separate and make 
+# one table w/ dups dropped to iterate
+
+# hold dict of key=COMID, val=length of retained array thru 
+# circleCell process to select the one to keep
+
+# find all of the indexes in the DF where x/y exist,
+# append/hold that index in new DF/drop from existing
+
+# can I have a DF with index duplicated, like with UID??
+##############################################################################
+# Notes  !!!!! USE queues !!!!!!!!!!!!!!!!! revolve array of tuples...........
+
+# sort length for each zone and process shortest ----> longest, slicing/deleting as you go
+
+# find array coords of raster zone perimeters
 #appending to hold obj in the loop seems to work, but not likely the best way 
 #to manage
 
@@ -102,6 +153,8 @@ go.to_tiff('D:/Projects/H2OShed_Tool/wsALSS-1065/yeah')
 
 ##############################################################################
 # shape = (w x h)
+
+
 
 #arr = np.array(range(48)).reshape(6,8)
 #
