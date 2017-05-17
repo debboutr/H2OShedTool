@@ -83,13 +83,13 @@ def Watershed(fdrf,ptf,val=47):
 #    (r_max - r_min, col_max - col_min)
 
     # shift transform to reduce NoData in the output raster
-    shifted_tf = (tf[0] + r_min * tf[-1],tf[1],tf[2],tf[3] - col_min * tf[1], tf[4],tf[5])
+    shifted_tf = (tf[0] - r_min * tf[-1],tf[1],tf[2],tf[3] - col_min * tf[1], tf[4],tf[5])
     # insert val into the cells of the raster
     out = np.zeros(arr.shape)
     for idx in hold:
         out[idx] = val
         
-    new = out[r_min:r_max,col_min:col_max]
+    new = out[r_min:(r_max+1),col_min:(col_max+1)]
     
     go = gr.GeoRaster(new,shifted_tf, 0)
     go.projection = Projection
