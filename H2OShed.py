@@ -6,10 +6,14 @@ Created on Tue Feb 21 12:55:48 2017
 """
 
 import os
+import gdal
 import numpy as np
+import pysal as ps
+import pandas as pd
 import geopandas as gpd
 import georasters as gr
 
+hold = []
 DIRS = {0:16,1:32,2:64,3:128,4:1,5:2,6:4,7:8}
 
 def ringCells(p):
@@ -23,30 +27,7 @@ def ringCells(p):
     five = (p[0]-1,p[1]-1)
     six = (p[0]-1,p[1])
     seven = (p[0]-1,p[1]+1)
-    return [zero,one,two,three,four,five,six,seven]
-
-def evalRing(ring,ras):
-    '''
-    '''
-    for c in range(len(ring)):
-        if c == 0 and ras.raster[ring[c]] == 16:
-            hold.append(ring[c])
-        if c == 1 and ras.raster[ring[c]] == 32:
-            hold.append(ring[c])
-        if c == 2 and ras.raster[ring[c]] == 64:
-            hold.append(ring[c])
-        if c == 3 and ras.raster[ring[c]] == 128:
-            hold.append(ring[c])
-        if c == 4 and ras.raster[ring[c]] == 1:
-            hold.append(ring[c])
-        if c == 5 and ras.raster[ring[c]] == 2:
-            hold.append(ring[c])
-        if c == 6 and ras.raster[ring[c]] == 4:
-            hold.append(ring[c])
-        if c == 7 and ras.raster[ring[c]] == 8:
-            hold.append(ring[c])
-    return hold   
- 
+    return [zero,one,two,three,four,five,six,seven] 
     
 def evalRing(ring,ras):
     '''
@@ -56,6 +37,107 @@ def evalRing(ring,ras):
             hold.append(ring[c])
     return hold 
 
+def makeRat(fn):
+    '''
+    __author__ =  "Matt Gregory <matt.gregory@oregonstate.edu >"
+    Adds a Raster Attribute Table to the .tif.aux.xml file, then passes those
+    values to rat_to_df function to return the RAT in a pandas DataFrame.
+
+    Arguments
+    ---------
+    fn               : raster filename
+    '''
+    ds = gdal.Open(fn)
+    rb = ds.GetRasterBand(1)
+    nd = rb.GetNoDataValue()
+    data = rb.ReadAsArray()
+    # Get unique values in the band and return counts for COUNT val
+    u = np.array(np.unique(data, return_counts=True))
+    #  remove NoData value
+    u = np.delete(u, np.argwhere(u==nd), axis=1)
+    
+    # Create and populate the RAT
+    rat = gdal.RasterAttributeTable()
+    rat.CreateColumn('Value', gdal.GFT_Integer, gdal.GFU_Generic)
+    rat.CreateColumn('Count', gdal.GFT_Integer, gdal.GFU_Generic)
+    for i in range(u[0].size):
+        rat.SetValueAsInt(i, 0, int(u[0][i]))
+        rat.SetValueAsInt(i, 1, int(u[1][i]))
+    
+    # Associate with the band
+    rb.SetDefaultRAT(rat)
+    
+    # Close the dataset and persist the RAT
+    ds = None 
+        #return the rat to build DataFrame
+    df = rat_to_df(rat)
+    return df
+       
+##############################################################################
+
+
+def rat_to_df(in_rat):
+    """
+    __author__ =  "Matt Gregory <matt.gregory@oregonstate.edu >"
+    Given a GDAL raster attribute table, convert to a pandas DataFrame
+    Parameters
+    ----------
+    in_rat : gdal.RasterAttributeTable
+        The input raster attribute table
+    Returns
+    -------
+    df : pd.DataFrame
+        The output data frame
+    """
+    # Read in each column from the RAT and convert it to a series infering
+    # data type automatically
+    s = [pd.Series(in_rat.ReadAsArray(i), name=in_rat.GetNameOfCol(i))
+         for i in xrange(in_rat.GetColumnCount())]
+
+    # Concatenate all series together into a dataframe and return
+    return pd.concat(s, axis=1)
+       
+##############################################################################
+
+def DF2dbf(df, dbf_path, my_specs=None):
+    '''
+    Convert a pandas.DataFrame into a dbf.
+
+    __author__  = "Dani Arribas-Bel <darribas@asu.edu> "
+    ...
+
+    Arguments
+    ---------
+    df          : DataFrame
+                  Pandas dataframe object to be entirely written out to a dbf
+    dbf_path    : str
+                  Path to the output dbf. It is also returned by the function
+    my_specs    : list
+                  List with the field_specs to use for each column.
+                  Defaults to None and applies the following scheme:
+                    * int: ('N', 14, 0)
+                    * float: ('N', 14, 14)
+                    * str: ('C', 14, 0)
+    '''
+    if my_specs:
+        specs = my_specs
+    else:
+        type2spec = {int: ('N', 20, 0),
+                     np.int64: ('N', 20, 0),
+                     float: ('N', 36, 15),
+                     np.float64: ('N', 36, 15),
+                     str: ('C', 14, 0),
+                     np.int32: ('N', 14, 0)
+                     }
+        types = [type(df[i].iloc[0]) for i in df.columns]
+        specs = [type2spec[t] for t in types]
+    db = ps.open(dbf_path, 'w')
+    db.header = list(df.columns)
+    db.field_spec = specs
+    for i, row in df.T.iteritems():
+        db.write(row)
+    db.close()
+    return dbf_path    
 
 def Watershed(fdrf,ptf,val=47):
     ''' 2-D Array (row,col)
@@ -78,9 +160,6 @@ def Watershed(fdrf,ptf,val=47):
     dd = np.array(hold)
     r_min, col_min = np.amin(dd,axis=0)
     r_max, col_max = np.amax(dd,axis=0)
-#    # below is for creating array after tranform adjust
-#    # may be too intensive to justify
-#    (r_max - r_min, col_max - col_min)
 
     # shift transform to reduce NoData in the output raster
     shifted_tf = (tf[0] - r_min * tf[-1],tf[1],tf[2],tf[3] - col_min * tf[1], tf[4],tf[5])
@@ -89,21 +168,20 @@ def Watershed(fdrf,ptf,val=47):
     for idx in hold:
         out[idx] = val
         
-    new = out[r_min:(r_max+1),col_min:(col_max+1)]
-    
+    new = out[r_min:(r_max+1),col_min:(col_max+1)]   
     go = gr.GeoRaster(new,shifted_tf, 0)
     go.projection = Projection
-    go.datatype = DataType
-    
+    go.datatype = DataType    
     fn = os.path.basename(ptf).split('.')[0]   
     loc = os.path.dirname(ptf)
-    go.to_tiff('{}/{}_watershed_ed'.format(loc,fn))
+    go.to_tiff('{}/{}_watershed_small'.format(loc,fn))
+    df = makeRat('{}/{}_watershed_small.tif'.format(loc,fn))
+    DF2dbf(df, '{}/{}_watershed_small.tif.vat.dbf'.format(loc,fn))
 
 if __name__ == '__main__':
-    flow = '/home/rick/projects/splitCats/fdr.tif'
-    ptfn = '/home/rick/projects/splitCats/point_5070.shp'
-    Watershed(flow,ptfn,55)
-    
+    flow = 'D:/Projects/temp/junk/tool_test/fdr'
+    ptfn = 'D:/Projects/temp/junk/tool_test/point.shp'
+    Watershed(flow,ptfn,55)    
     
     
 
